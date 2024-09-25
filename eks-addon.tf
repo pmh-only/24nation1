@@ -29,6 +29,7 @@ module "eks_blueprints_addons" {
   enable_bottlerocket_update_operator = true
   enable_aws_load_balancer_controller = true
   enable_external_secrets = true
+  enable_aws_gateway_api_controller = true
   
   aws_load_balancer_controller = {
     set = [

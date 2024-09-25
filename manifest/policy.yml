@@ -1,0 +1,82 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: a1
+spec:
+  validationFailureAction: enforce
+  background: false
+  rules:
+  - name: deny-rule
+    match:
+      resources:
+        namespaces:
+          - prod
+        kinds:
+        - Pod
+    preconditions:
+      - key: '{{request.object.metadata.labels."cloudhrdk.com/env"}}'
+        operator: NotEquals
+        value: prod
+    validate:
+      message: "label not found (prod)"
+      deny: {}
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: a2
+spec:
+  validationFailureAction: enforce
+  background: false
+  rules:
+  - name: deny-rule
+    match:
+      resources:
+        namespaces:
+          - beta
+        kinds:
+        - Pod
+    preconditions:
+      - key: '{{request.object.metadata.labels."cloudhrdk.com/env"}}'
+        operator: NotEquals
+        value: beta
+    validate:
+      message: "label not found (beta)"
+      deny: {}
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: b1
+spec:
+  validationFailureAction: enforce
+  background: false
+  rules:
+  - name: require-image-tag
+    match:
+      any:
+      - resources:
+          namespaces:
+            - prod
+          kinds:
+          - Pod
+    validate:
+      message: "no latest tag (prod)"
+      pattern:
+        spec:
+          containers:
+          - image: "*:*"
+  - name: validate-image-tag
+    match:
+      any:
+      - resources:
+          namespaces:
+            - prod
+          kinds:
+          - Pod
+    validate:
+      message: "no latest tag (prod)"
+      pattern:
+        spec:
+          containers:
+          - image: "!*:latest"

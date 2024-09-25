@@ -1,0 +1,141 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:  customer-deploy
+  namespace: wsc2024
+  labels:
+    app:  customer-deploy
+spec:
+  selector:
+    matchLabels:
+      app: customer-deploy
+  replicas: 2
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app:  customer-deploy
+    spec:
+      readinessGates:
+        - conditionType: target-health.alb.ingress.k8s.aws/ing_customer-service_8080
+      tolerations:
+        - key: app
+          value: db
+      nodeSelector:
+        app: db
+
+      # initContainers:
+        # Init containers are exactly like regular containers, except:
+          # - Init containers always run to completion.
+          # - Each init container must complete successfully before the next one starts.
+      containers:
+      - name:  customer-deploy
+        image:  648911607072.dkr.ecr.us-east-1.amazonaws.com/customer-repo:latest
+        lifecycle:
+          preStop:
+            exec:
+              command: ['sleep', '20']
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 100m
+            memory: 100Mi
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 5
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthcheck
+            port: 8080
+          initialDelaySeconds: 5
+          timeoutSeconds: 2
+          successThreshold: 1
+          failureThreshold: 3
+          periodSeconds: 10
+        env:
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: dbsecret
+              key: user
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dbsecret
+              key: password
+        - name: MYSQL_HOST
+          valueFrom:
+            secretKeyRef:
+              name: dbsecret
+              key: host
+        - name: MYSQL_PORT
+          valueFrom:
+            secretKeyRef:
+              name: dbsecret
+              key: port
+        - name: MYSQL_DBNAME
+          valueFrom:
+            secretKeyRef:
+              name: dbsecret
+              key: dbname
+        ports:
+        - containerPort:  8080
+          name:  customer-deploy
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: customer-service
+  namespace: wsc2024
+spec:
+  selector:
+    app: customer-deploy
+  type: ClusterIP
+  sessionAffinity: None
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+  ports:
+  - name: customer-service
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+    # If you set the `spec.type` field to `NodePort` and you want a specific port number,
+    # you can specify a value in the `spec.ports[*].nodePort` field.
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: customer-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: customer-deploy
+  minReplicas: 2
+  maxReplicas: 16
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 50
